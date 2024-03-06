@@ -1,10 +1,13 @@
+from nltk.corpus import stopwords
 from unidecode import unidecode 
 import statistics
+import random
+import nltk
 import os
 import re
 
 from .utils import IN
-
+      
 
 def pipeline():
     """
@@ -13,6 +16,11 @@ def pipeline():
     * structure de la phrase
     * complexité du vocabulaire
     """
+    nltk.download('punkt')
+    nltk.download('stopwords')   
+    nltk.download('universal_tagset')                                                                                      
+    nltk.download('averaged_perceptron_tagger')                                                                                  
+
     waves_stats = {}
     dalloway_stats = {}
     lighthouse_stats = {}
@@ -38,10 +46,15 @@ def pipeline():
     stats_dalloway = study_phrase(dalloway_phrase, dalloway_stats)
     stats_lighthouse = study_phrase(lighthouse_phrase, lighthouse_stats)
 
-    # étudier les variations de vocabulaire
-    stats_lighthouse = study_vocabulaire(lighthouse, lighthouse_stats)
-    stats_dalloway = study_vocabulaire(dalloway, dalloway_stats)
-    stats_waves = study_vocabulaire(waves, stats_waves)
+    # étudier la distribution du vocabulaire
+    stats_lighthouse = distribution_vocabulaire(lighthouse, lighthouse_stats, "lighthouse")
+    stats_dalloway = distribution_vocabulaire(dalloway, dalloway_stats, "dalloway")
+    stats_waves = distribution_vocabulaire(waves, stats_waves, "waves")
+
+    # étudier la densité lexicale
+    stats_lighthouse = densite_lexicale(lighthouse, lighthouse_stats, "lighthouse")
+    stats_dalloway = densite_lexicale(dalloway, dalloway_stats, "dalloway")
+    stats_waves = densite_lexicale(waves, stats_waves, "waves")
 
     return
 
@@ -128,7 +141,7 @@ def study_paragraphe(paragraphes, stats):
     med_phrases = statistics.median(count_phrases)
 
     stats["mediane_mots_par_paragraphe"] = med_mots
-    stats["mediane_phrases_par_paragraphe"] = med_mots   
+    stats["mediane_phrases_par_paragraphe"] = med_phrases  
     return stats
 
 
@@ -204,19 +217,69 @@ def study_phrase(phrases, stats):
     return stats
 
 
-def study_vocabulaire(txt, stats):
+def distribution_vocabulaire(txt, stats, name):
     """
-    enfin, on étudie la variété du vocabulaire entre chaque roman
+    étudier la distribution du vocabulaire dans les trois romans
     """
-    # simplifier le texte
+    print(f"\n*********************\n* {name}\n*********************")   
     txt = re.sub("[^a-z ]", " ", txt)  # on enlève tous les caractères non-alphabétiques et les espaces
     txt = re.sub("\s+", " ", txt)      # on normalise les espaces
-    txt = txt.split(" ")               # notre texte complet simplifié
+    tokens = nltk.word_tokenize(txt)   # tokenisation au mot (similaire à txt.split(" "), mais performe des simplifications en plus)
     
-    # variété du vocabulaire
-    #TODO
+    # on génère un sample sans stopwords
+    size = 5000  # taille du corpus (en nb de tokens)
+    stop_words = set(stopwords.words("english"))
+    print(len(stop_words), list(stop_words)[:10])
+    tokens_clean = []
+    for token in tokens:
+        if token.lower() not in stop_words:
+             tokens_clean.append(token)
+    sample = random.sample(tokens_clean, size)
+    
+    # calculter une distribution de fréquences
+    fd = nltk.FreqDist(sample)  # mot / nombres d'occurrences
+    fd.tabulate(10)
 
-    # densité lexicale
-    #TODO
+    # grouper le vocabulaire en quantiles: 10% des mots les plus utilisés = ensemble de n mots
+    distribution = []
+    # fd.r_Nr()  # { 5: 35 } => 35 mots utilisés 5 fois dans le roman
+    for mot, occurrences in fd.items():
+        distribution.append(occurrences/max(fd.values()))  # liste de probabilité d'occurrence des mots, sur une échelle 0..1: 0 = mot jamais présent, 1 = mot le plus fréquent dans le corpus
+    distribution = sorted(distribution)                          # on ordonne la liste par la fréquence d'apparition du mot
+    for i in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]:
+        k = len([ d for d in distribution if d <= i-0.1 and d < i ])  # non en fait ça marche pas
+        print(k)
+    # for taille_corpus,occurrences in rnr.items():
+    #     for i in range(occurrences):
+    exit()
+
+    return stats
+
+
+def densite_lexicale(txt, stats, name):
+    """
+    enfin, on étudie la densité lexicale de chaque roman
+
+    on suit la méthode de Ure: 100 * <nb d'unités lexicales> / <nb de tokens>
+    https://en.wikipedia.org/wiki/Lexical_density 
+    https://www.nltk.org/book/ch05.html
+    """
+    tokens = nltk.word_tokenize(txt)    # tokenisation au mot (similaire à txt.split(" "), mais performe des simplifications en plus)
     
+    ###### SAMPLING MESSES UP THE RESULTS ??????
+    # size = 30000
+    # sample = random.sample(txt, size)  # on ne retient que 30.000 tokens
+    sample = tokens
+    size = len(tokens)
+    pos = nltk.pos_tag(sample, tagset="universal")  # part-of-speech tagging (classification du texte en classes: verbes...). universal définit des classes très généralistes
+    tags = []
+    for (token, tag) in pos:
+        tags.append(tag)
+    fd = nltk.FreqDist(tags)  # valeur associée aux nombre d'occurrences de celle-ci
+    fd.tabulate()
+    nlex = fd.get("NOUN") + fd.get("VERB") + fd.get("ADJ") + fd.get("ADV")  # nb d'unités lexicales
+    ld = 100 * (nlex/size)
+    
+    stats["densite_lexicale"] = ld
+
     return stats
