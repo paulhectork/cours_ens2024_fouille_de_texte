@@ -1,5 +1,6 @@
 from nltk.corpus import stopwords
 from unidecode import unidecode 
+from tabulate import tabulate
 import statistics
 import random
 import nltk
@@ -17,6 +18,7 @@ def pipeline():
     * complexité du vocabulaire
     """
     nltk.download('punkt')
+    nltk.download('wordnet') 
     nltk.download('stopwords')   
     nltk.download('universal_tagset')                                                                                      
     nltk.download('averaged_perceptron_tagger')                                                                                  
@@ -46,15 +48,15 @@ def pipeline():
     stats_dalloway = study_phrase(dalloway_phrase, dalloway_stats)
     stats_lighthouse = study_phrase(lighthouse_phrase, lighthouse_stats)
 
-    # étudier la distribution du vocabulaire
-    stats_lighthouse = distribution_vocabulaire(lighthouse, lighthouse_stats, "lighthouse")
-    stats_dalloway = distribution_vocabulaire(dalloway, dalloway_stats, "dalloway")
-    stats_waves = distribution_vocabulaire(waves, stats_waves, "waves")
-
     # étudier la densité lexicale
     stats_lighthouse = densite_lexicale(lighthouse, lighthouse_stats, "lighthouse")
     stats_dalloway = densite_lexicale(dalloway, dalloway_stats, "dalloway")
     stats_waves = densite_lexicale(waves, stats_waves, "waves")
+
+    # étudier la distribution du vocabulaire
+    stats_lighthouse = distribution_vocabulaire(lighthouse, lighthouse_stats, "lighthouse")
+    stats_dalloway = distribution_vocabulaire(dalloway, dalloway_stats, "dalloway")
+    stats_waves = distribution_vocabulaire(waves, stats_waves, "waves")
 
     return
 
@@ -217,45 +219,6 @@ def study_phrase(phrases, stats):
     return stats
 
 
-def distribution_vocabulaire(txt, stats, name):
-    """
-    étudier la distribution du vocabulaire dans les trois romans
-    """
-    print(f"\n*********************\n* {name}\n*********************")   
-    txt = re.sub("[^a-z ]", " ", txt)  # on enlève tous les caractères non-alphabétiques et les espaces
-    txt = re.sub("\s+", " ", txt)      # on normalise les espaces
-    tokens = nltk.word_tokenize(txt)   # tokenisation au mot (similaire à txt.split(" "), mais performe des simplifications en plus)
-    
-    # on génère un sample sans stopwords
-    size = 5000  # taille du corpus (en nb de tokens)
-    stop_words = set(stopwords.words("english"))
-    print(len(stop_words), list(stop_words)[:10])
-    tokens_clean = []
-    for token in tokens:
-        if token.lower() not in stop_words:
-             tokens_clean.append(token)
-    sample = random.sample(tokens_clean, size)
-    
-    # calculter une distribution de fréquences
-    fd = nltk.FreqDist(sample)  # mot / nombres d'occurrences
-    fd.tabulate(10)
-
-    # grouper le vocabulaire en quantiles: 10% des mots les plus utilisés = ensemble de n mots
-    distribution = []
-    # fd.r_Nr()  # { 5: 35 } => 35 mots utilisés 5 fois dans le roman
-    for mot, occurrences in fd.items():
-        distribution.append(occurrences/max(fd.values()))  # liste de probabilité d'occurrence des mots, sur une échelle 0..1: 0 = mot jamais présent, 1 = mot le plus fréquent dans le corpus
-    distribution = sorted(distribution)                          # on ordonne la liste par la fréquence d'apparition du mot
-    for i in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]:
-        k = len([ d for d in distribution if d <= i-0.1 and d < i ])  # non en fait ça marche pas
-        print(k)
-    # for taille_corpus,occurrences in rnr.items():
-    #     for i in range(occurrences):
-    exit()
-
-    return stats
-
-
 def densite_lexicale(txt, stats, name):
     """
     enfin, on étudie la densité lexicale de chaque roman
@@ -266,12 +229,8 @@ def densite_lexicale(txt, stats, name):
     """
     tokens = nltk.word_tokenize(txt)    # tokenisation au mot (similaire à txt.split(" "), mais performe des simplifications en plus)
     
-    ###### SAMPLING MESSES UP THE RESULTS ??????
-    # size = 30000
-    # sample = random.sample(txt, size)  # on ne retient que 30.000 tokens
-    sample = tokens
     size = len(tokens)
-    pos = nltk.pos_tag(sample, tagset="universal")  # part-of-speech tagging (classification du texte en classes: verbes...). universal définit des classes très généralistes
+    pos = nltk.pos_tag(tokens, tagset="universal")  # part-of-speech tagging (classification du texte en classes: verbes...). universal définit des classes très généralistes
     tags = []
     for (token, tag) in pos:
         tags.append(tag)
@@ -282,4 +241,60 @@ def densite_lexicale(txt, stats, name):
     
     stats["densite_lexicale"] = ld
 
+    return stats
+
+
+def distribution_vocabulaire(txt, stats, name):
+    """
+    étudier la distribution du vocabulaire dans les trois romans
+    """
+    print(f"\n*********************\n* {name}\n*********************")   
+    txt = re.sub("[^a-z ]", " ", txt)  # on enlève tous les caractères non-alphabétiques et les espaces
+    txt = re.sub("\s+", " ", txt)      # on normalise les espaces
+    tokens = nltk.word_tokenize(txt)   # tokenisation au mot (similaire à txt.split(" "), mais performe des simplifications en plus)
+    
+    # on fait un part-of-speech tagging sur le 
+    # corpus pour pouvoir ensuite le lemmatiser
+    size = 5000  # la taille du corpus final: 5000 tokens
+    sample_pos = []
+    pos = nltk.pos_tag(tokens, tagset="universal")  # part-of-speech tagging (classification du texte en classes: verbes...). universal définit des classes très généralistes
+    for (token, tag) in pos:
+        if tag in [ "NOUN", "VERB", "ADJ", "ADV" ]:
+            sample_pos.append(token)
+    sample_pos = random.sample(sample_pos, size)
+
+    # on lemmatise le corpus
+    lemmatizer = nltk.stem.WordNetLemmatizer()
+    sample_lem = [ lemmatizer.lemmatize(token) for token in sample_pos ]
+
+    # calculter une distribution de fréquences
+    fd = nltk.FreqDist(sample_lem)  # mot / nombres d'occurrences
+    fd.tabulate(10)
+
+    # grouper le vocabulaire en quantiles: 
+    # lecture: les 10% des lemmes les plus fréquemment rencontrés représentent un ensemble de n lemmes distincts
+    distribution = []
+    distribution_deciles = []
+    for mot, occurrences in fd.items():
+        distribution.append(occurrences/max(fd.values()))  # liste de probabilité d'occurrence des mots, sur une échelle 0..1: 0 = mot jamais présent, 1 = mot le plus fréquent dans le corpus
+    distribution = sorted(distribution)                    # on ordonne la liste par la fréquence d'apparition du mot
+    for i in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
+        k = []
+        for d in distribution:
+            if i != 1:
+                if i > d >= i-0.1:
+                    k.append(d)
+            else:
+                if i >= d >= i-0.1:
+                    k.append(d)
+        distribution_deciles.append(len(k))  # nombre de lemmes distincts dans cette tranche de 10%
+    
+    # enfin, on affiche une table de distribution 
+    # (plus lisible qu'un graphique)
+    deciles = [ f"{i-5}-{i+5}" for i in range(5, 105, 10) ]
+    table = [distribution_deciles]
+    print(tabulate(table, headers=deciles))
+
+    stats["distribution_vocabulaire"] = distribution_deciles
+    
     return stats
