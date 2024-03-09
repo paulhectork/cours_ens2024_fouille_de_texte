@@ -49,15 +49,54 @@ def pipeline():
     stats_lighthouse = study_phrase(lighthouse_phrase, lighthouse_stats)
 
     # étudier la densité lexicale
-    stats_lighthouse = densite_lexicale(lighthouse, lighthouse_stats, "lighthouse")
-    stats_dalloway = densite_lexicale(dalloway, dalloway_stats, "dalloway")
-    stats_waves = densite_lexicale(waves, stats_waves, "waves")
+    stats_lighthouse = densite_lexicale(lighthouse, lighthouse_stats)
+    stats_dalloway = densite_lexicale(dalloway, dalloway_stats)
+    stats_waves = densite_lexicale(waves, stats_waves)
 
     # étudier la distribution du vocabulaire
-    stats_lighthouse = distribution_vocabulaire(lighthouse, lighthouse_stats, "lighthouse")
-    stats_dalloway = distribution_vocabulaire(dalloway, dalloway_stats, "dalloway")
-    stats_waves = distribution_vocabulaire(waves, stats_waves, "waves")
+    stats_lighthouse = distribution_vocabulaire(lighthouse, lighthouse_stats)
+    stats_dalloway = distribution_vocabulaire(dalloway, dalloway_stats)
+    stats_waves = distribution_vocabulaire(waves, stats_waves)
 
+    # afficher les résultats
+    headers = [ "", "Mrs. Dalloway (1925)", "To the Lighthouse (1927)", "The Waves (1931)" ]
+    data = [ [ "nombre médian de mots par paragraphes"
+             , stats_dalloway["nombre médian de mots par paragraphes"] 
+             , stats_lighthouse["nombre médian de mots par paragraphes"]
+             , stats_waves["nombre médian de mots par paragraphes"] 
+             ],
+             [ "nombre médian de phrases par paragraphes"
+             , stats_dalloway["nombre médian de phrases par paragraphes"] 
+             , stats_lighthouse["nombre médian de phrases par paragraphes"]
+             , stats_waves["nombre médian de phrases par paragraphes"] 
+             ],
+             [ "nombre médian de mots par phrase"
+             , stats_dalloway["nombre médian de mots par phrase"] 
+             , stats_lighthouse["nombre médian de mots par phrase"]
+             , stats_waves["nombre médian de mots par phrase"] 
+             ],
+             [ "nombre moyen de signes de ponctuation par phrase"
+             , stats_dalloway["nombre moyen de signes de ponctuation par phrase"] 
+             , stats_lighthouse["nombre moyen de signes de ponctuation par phrase"]
+             , stats_waves["nombre moyen de signes de ponctuation par phrase"] 
+             ],
+             [ "densité lexicale"
+             , stats_dalloway["densité lexicale"] 
+             , stats_lighthouse["densité lexicale"]
+             , stats_waves["densité lexicale"] 
+             ],
+             [ "distribution du vocabulaire\n(nombre de lemmes distincts par décile)"
+             , "\n".join(f"{k} : {v}" for k,v in stats_dalloway["lemmes distincts"].items() )
+             , "\n".join(f"{k} : {v}" for k,v in stats_lighthouse["lemmes distincts"].items() )
+             , "\n".join(f"{k} : {v}" for k,v in stats_waves["lemmes distincts"].items() )
+             ],
+             [ "distribution du vocabulaire\n(moyenne d'utilisation d'un lemme par décile)"
+             , "\n".join(f"{k} : {v}" for k,v in stats_dalloway["lemme moyenne"].items() )
+             , "\n".join(f"{k} : {v}" for k,v in stats_lighthouse["lemme moyenne"].items() )
+             , "\n".join(f"{k} : {v}" for k,v in stats_waves["lemme moyenne"].items() )
+             ] 
+    ]
+    print(tabulate(data, headers, tablefmt="rounded_grid"))
     return
 
 
@@ -142,8 +181,8 @@ def study_paragraphe(paragraphes, stats):
         count_phrases.append(len(p))
     med_phrases = statistics.median(count_phrases)
 
-    stats["mediane_mots_par_paragraphe"] = med_mots
-    stats["mediane_phrases_par_paragraphe"] = med_phrases  
+    stats["nombre médian de mots par paragraphes"] = med_mots
+    stats["nombre médian de phrases par paragraphes"] = med_phrases  
     return stats
 
 
@@ -154,14 +193,13 @@ def study_phrase(phrases, stats):
     de clauses (de façon approximative)
     
     on utilise une moyenne pour le nombre de signes de 
-    ponctuation et le nombre de clauses par phrase: de 
-    nombreuses phrases n'ont qu'une clause / pas de signes 
-    de ponctuation, et on doit donc faire des calculs sur des
-    listes de valeurs dont la plupart sont entre 0 et 1. cela 
-    déséquilibre la médiane et ne permet pas de voir ce qui se
-    passe pour les phrases plus complexes et plus rages (où le 
-    nombre de clauses ou de ponctuation peut être bien plus élevé).
-    les moyennes permettent de faire mieux ressortir ces variations.
+    ponctuation: de pas de signes de ponctuation, et on doit donc 
+    faire des calculs sur des listes de valeurs dont la plupart 
+    sont entre 0 et 1. cela déséquilibre la médiane et ne permet 
+    pas de voir ce qui se passe pour les phrases plus complexes et 
+    plus rares (où le nombre de clauses ou de ponctuation peut être 
+    bien plus élevé). les moyennes permettent de faire mieux 
+    ressortir ces variations.
     """
     # nombre médian de mots par phrases
     count_mots = []
@@ -176,50 +214,43 @@ def study_phrase(phrases, stats):
     for p in phrases:
         punct = re.findall("([,;:&—\(]|-{2,})", p)          # re.findall() retourne une liste de toutes les occurences de la regex trouvées 
         count_punct.append(len(punct))
-    mean_punct = statistics.mean(count_punct)
+    mean_punct = round(statistics.mean(count_punct), 3)
 
     # enfin, la moyenne de clauses par phrases.
     # on estime le nombre de clauses à partir de "séparateurs", 
     # çad de mots et signes de ponctuation qui viennent en général séparer des clauses
-    count_clauses = []
-    tokens = [",", ";", ":", "&", "—", "(", ")", "--", "because"  # notre liste de mots ou caractères qui vont servir à scinder notre phrase en clauses
-             , "thus", "why", "or", "hence", "for", "but", "and"
-             , "&", None, "" ]
-    rgx = re.compile("""(
-        ,|;|:|&|—|\(|\)|-{2,}  # les signes de ponctuation
-        |(?<!\w)               # le bloc suivant n'est pas précédé d'une lettre
-        (
-            because            # les sauts séparateurs
-            |thus
-            |why
-            |or
-            |hence
-            |for
-            |but
-            |and
-            |&
-        )
-        (?!\w)                # le bloc précédent n'est pas suivi d'une lettre
-    )""", re.VERBOSE)
-    for p in phrases:
-        clauses = re.split(rgx, p)
-        clauses = [ c.strip() for c in clauses if c not in tokens ]  # avec notre regex, les séparateurs sont inclus dans la liste produite par `re.split()` => on les supprime
-        count_clauses.append(len(clauses))
-    mean_clauses = statistics.mean(count_clauses)
+    # count_clauses = []
+    # tokens = [",", ";", ":", "&", "—", "(", ")", "--", "because"  # notre liste de mots ou caractères qui vont servir à scinder notre phrase en clauses
+    #          , "thus", "why", "or", "hence", "for", "but", "and"
+    #          , "&", None, "" ]
+    # rgx = re.compile("""(
+    #     ,|;|:|&|—|\(|\)|-{2,}  # les signes de ponctuation
+    #     |(?<!\w)               # le bloc suivant n'est pas précédé d'une lettre
+    #     (
+    #         because            # les sauts séparateurs
+    #         |thus
+    #         |why
+    #         |or
+    #         |hence
+    #         |for
+    #         |but
+    #         |and
+    #         |&
+    #     )
+    #     (?!\w)                # le bloc précédent n'est pas suivi d'une lettre
+    # )""", re.VERBOSE)
+    # for p in phrases:
+    #     clauses = re.split(rgx, p)
+    #     clauses = [ c.strip() for c in clauses if c not in tokens ]  # avec notre regex, les séparateurs sont inclus dans la liste produite par `re.split()` => on les supprime
+    #     count_clauses.append(len(clauses))
+    # mean_clauses = statistics.mean(count_clauses)
 
-    stats["mediane_mots_par_phrase"] = med_mots
-    stats["moyenne_ponctuation_par_phrase"] = mean_punct
-    stats["moyenne_clauses_par_phrase"] = mean_clauses
-
-    # print("médiane ponctuation: ", statistics.median(count_punct))
-    # print("moyenne ponctuation: ", mean_punct)
-    # print("médiane clauses    : ", statistics.median(count_clauses))
-    # print("moyenne clauses    : ", mean_clauses)
-
+    stats["nombre médian de mots par phrase"] = med_mots
+    stats["nombre moyen de signes de ponctuation par phrase"] = mean_punct
     return stats
 
 
-def densite_lexicale(txt, stats, name):
+def densite_lexicale(txt, stats):
     """
     enfin, on étudie la densité lexicale de chaque roman
 
@@ -229,35 +260,42 @@ def densite_lexicale(txt, stats, name):
     """
     tokens = nltk.word_tokenize(txt)    # tokenisation au mot (similaire à txt.split(" "), mais performe des simplifications en plus)
     
-    size = len(tokens)
+    size = len(tokens)  # on travaille sur tout le corpus
     pos = nltk.pos_tag(tokens, tagset="universal")  # part-of-speech tagging (classification du texte en classes: verbes...). universal définit des classes très généralistes
     tags = []
     for (token, tag) in pos:
         tags.append(tag)
+    
     fd = nltk.FreqDist(tags)  # valeur associée aux nombre d'occurrences de celle-ci
-    fd.tabulate()
     nlex = fd.get("NOUN") + fd.get("VERB") + fd.get("ADJ") + fd.get("ADV")  # nb d'unités lexicales
     ld = 100 * (nlex/size)
     
-    stats["densite_lexicale"] = ld
+    stats["densité lexicale"] = round(ld, 3)
 
     return stats
 
 
-def distribution_vocabulaire(txt, stats, name):
+def distribution_vocabulaire(txt, stats):
     """
     étudier la distribution du vocabulaire dans les trois romans
     """
-    print(f"\n*********************\n* {name}\n*********************")   
     txt = re.sub("[^a-z ]", " ", txt)  # on enlève tous les caractères non-alphabétiques et les espaces
     txt = re.sub("\s+", " ", txt)      # on normalise les espaces
     tokens = nltk.word_tokenize(txt)   # tokenisation au mot (similaire à txt.split(" "), mais performe des simplifications en plus)
     
+    # on supprime tous les stopwords (mots jugés 
+    # "inutiles" pour l'analyse automatique)
+    tokens_filtered = []
+    stop_words = set(stopwords.words("english"))
+    for token in tokens:  
+        if token.lower() not in stop_words:
+            tokens_filtered.append(token)
+
     # on fait un part-of-speech tagging sur le 
     # corpus pour pouvoir ensuite le lemmatiser
     size = 5000  # la taille du corpus final: 5000 tokens
     sample_pos = []
-    pos = nltk.pos_tag(tokens, tagset="universal")  # part-of-speech tagging (classification du texte en classes: verbes...). universal définit des classes très généralistes
+    pos = nltk.pos_tag(tokens_filtered, tagset="universal")  # part-of-speech tagging (classification du texte en classes: verbes...). universal définit des classes très généralistes
     for (token, tag) in pos:
         if tag in [ "NOUN", "VERB", "ADJ", "ADV" ]:
             sample_pos.append(token)
@@ -269,32 +307,39 @@ def distribution_vocabulaire(txt, stats, name):
 
     # calculter une distribution de fréquences
     fd = nltk.FreqDist(sample_lem)  # mot / nombres d'occurrences
-    fd.tabulate(10)
-
+    
     # grouper le vocabulaire en quantiles: 
-    # lecture: les 10% des lemmes les plus fréquemment rencontrés représentent un ensemble de n lemmes distincts
-    distribution = []
-    distribution_deciles = []
-    for mot, occurrences in fd.items():
-        distribution.append(occurrences/max(fd.values()))  # liste de probabilité d'occurrence des mots, sur une échelle 0..1: 0 = mot jamais présent, 1 = mot le plus fréquent dans le corpus
-    distribution = sorted(distribution)                    # on ordonne la liste par la fréquence d'apparition du mot
+    # lecture: les 10% des lemmes les plus fréquemment 
+    # rencontrés sont utilisés en moyenne n fois.
+    distribution_moyenne = []  # [ <moyenne d'occurrences pour un lemme, par décile>]
+    distribution_somme = []    # [ <nombre absolu de lemmes, par décile>]
     for i in [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]:
-        k = []
-        for d in distribution:
+        k = []  # liste du nombre d'occurrences par quantile
+        # on remplit `k` avec le nombre d'occurrences par quartile
+        for mot, occurrences in fd.items():
+            quantile = occurrences/max(fd.values())  # représentation de l'utilisation du mot sur une échelle 0..1: 0 = mot jamais utilisé, 1 = mot le plus utilisé
             if i != 1:
-                if i > d >= i-0.1:
-                    k.append(d)
+                if i > quantile >= i-0.1:
+                    k.append(occurrences)
             else:
-                if i >= d >= i-0.1:
-                    k.append(d)
-        distribution_deciles.append(len(k))  # nombre de lemmes distincts dans cette tranche de 10%
+                if i >= quantile >= i-0.1:
+                    k.append(occurrences)
+        # on calcule nos statistiques et on les ajoute aux listes `distribution`
+        if len(k) > 0:
+            mean = round(statistics.mean(k), 3)
+            distribution_moyenne.append(mean)
+        else:
+            distribution_moyenne.append(0)  # 0 mot ne rentre dans ce quantile => on ne peut calculer de moyenne
+        distribution_somme.append(len(k))   
     
     # enfin, on affiche une table de distribution 
     # (plus lisible qu'un graphique)
-    deciles = [ f"{i-5}-{i+5}" for i in range(5, 105, 10) ]
-    table = [distribution_deciles]
-    print(tabulate(table, headers=deciles))
-
-    stats["distribution_vocabulaire"] = distribution_deciles
+    deciles = [ "-50..-40", "-40..-30", "-30..-20", "-20..-10", "-10..0"
+              , "0..10", "10..20", "20..30", "30..40", "40..50" ]
+    somme = { k:v for k,v in zip(deciles, distribution_somme)}  # tabulate([distribution_somme], headers=deciles)
+    moyenne = { k:v for k,v in zip(deciles, distribution_moyenne)}    
     
+    stats["lemmes distincts"] = somme
+    stats["lemme moyenne"] = moyenne
     return stats
+
