@@ -59,7 +59,7 @@ def pipeline():
     stats_waves = distribution_vocabulaire(waves, stats_waves)
 
     # afficher les résultats
-    headers = [ "", "Mrs. Dalloway (1925)", "To the Lighthouse (1927)", "The Waves (1931)" ]
+    headers = [ "", "Mrs. Dalloway, 1925", "To the Lighthouse, 1927", "The Waves, 1931" ]
     data = [ [ "nombre médian de mots par paragraphes"
              , stats_dalloway["nombre médian de mots par paragraphes"] 
              , stats_lighthouse["nombre médian de mots par paragraphes"]
